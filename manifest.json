@@ -1,0 +1,10 @@
+{
+  "id": "claudian",
+  "name": "Claudian OpenCode",
+  "version": "2.0.4",
+  "minAppVersion": "1.4.5",
+  "description": "Embeds OpenCode as an AI collaborator in your vault, with Codex as an optional provider. Your vault becomes the agent's working directory for file edits, search, shell commands, and multi-step workflows.",
+  "author": "Yishen Tu",
+  "authorUrl": "https://github.com/YishenTu",
+  "isDesktopOnly": true
+}
