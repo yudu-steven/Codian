@@ -9076,23 +9076,12 @@ var DEFAULT_CLAUDIAN_SETTINGS = {
 
 // src/app/settings/ClaudianSettingsStorage.ts
 var LEGACY_TOP_LEVEL_PROVIDER_FIELDS = [
-  "claudeSafeMode",
-  "codexSafeMode",
-  "claudeCliPath",
-  "claudeCliPathsByHost",
-  "codexCliPath",
-  "codexCliPathsByHost",
-  "codexReasoningSummary",
-  "loadUserClaudeSettings",
-  "codexEnabled",
-  "lastClaudeModel",
   "enableChrome",
   "enableBangBash",
   "enableOpus1M",
   "enableSonnet1M",
   "environmentVariables",
-  "lastEnvHash",
-  "lastCodexEnvHash"
+  "lastEnvHash"
 ];
 function stripLegacyFields(settings11) {
   const {
@@ -9104,23 +9093,12 @@ function stripLegacyFields(settings11) {
     allowedExportPaths: _allowedExportPaths,
     enableBlocklist: _enableBlocklist,
     blockedCommands: _blockedCommands,
-    claudeSafeMode: _claudeSafeMode,
-    codexSafeMode: _codexSafeMode,
-    claudeCliPath: _claudeCliPath,
-    claudeCliPathsByHost: _claudeCliPathsByHost,
-    codexCliPath: _codexCliPath,
-    codexCliPathsByHost: _codexCliPathsByHost,
-    codexReasoningSummary: _codexReasoningSummary,
-    loadUserClaudeSettings: _loadUserClaudeSettings,
-    codexEnabled: _codexEnabled,
-    lastClaudeModel: _lastClaudeModel,
     enableChrome: _enableChrome,
     enableBangBash: _enableBangBash,
     enableOpus1M: _enableOpus1M,
     enableSonnet1M: _enableSonnet1M,
     environmentVariables: _environmentVariables,
     lastEnvHash: _lastEnvHash,
-    lastCodexEnvHash: _lastCodexEnvHash,
     ...cleaned
   } = settings11;
   return cleaned;
@@ -9182,47 +9160,12 @@ function normalizeEnvSnippets(value) {
 function hasLegacyTopLevelProviderFields(stored) {
   return LEGACY_TOP_LEVEL_PROVIDER_FIELDS.some((key) => key in stored);
 }
-function mergeLegacyClaudeHiddenCommands(hiddenProviderCommands, legacyHiddenSlashCommands) {
-  const legacyCommands = normalizeHiddenCommandList(legacyHiddenSlashCommands);
-  if (legacyCommands.length === 0 || hiddenProviderCommands.claude) {
-    return hiddenProviderCommands;
-  }
-  return {
-    ...hiddenProviderCommands,
-    claude: legacyCommands
-  };
-}
 function removeProviderScopedState(record2, providerId) {
   if (!record2 || typeof record2 !== "object" || Array.isArray(record2) || !(providerId in record2)) {
     return false;
   }
   delete record2[providerId];
   return true;
-}
-function stripClaudeProviderState(settings11) {
-  let changed = false;
-  changed = removeProviderScopedState(settings11.providerConfigs, "claude") || changed;
-  changed = removeProviderScopedState(settings11.hiddenProviderCommands, "claude") || changed;
-  changed = removeProviderScopedState(settings11.savedProviderModel, "claude") || changed;
-  changed = removeProviderScopedState(settings11.savedProviderEffort, "claude") || changed;
-  changed = removeProviderScopedState(settings11.savedProviderServiceTier, "claude") || changed;
-  changed = removeProviderScopedState(settings11.savedProviderThinkingBudget, "claude") || changed;
-  const hasClaudeProviderSelection = settings11.settingsProvider === "claude";
-  const hasClaudeModelSelection = typeof settings11.model === "string" && claudeChatUIConfig.ownsModel(settings11.model, settings11);
-  const hasClaudeTitleModelSelection = typeof settings11.titleGenerationModel === "string" && claudeChatUIConfig.ownsModel(settings11.titleGenerationModel, settings11);
-  if (hasClaudeProviderSelection) {
-    settings11.settingsProvider = DEFAULT_CHAT_PROVIDER_ID;
-    changed = true;
-  }
-  if (hasClaudeModelSelection) {
-    settings11.model = OPEN_CODE_DEFAULT_MODEL;
-    changed = true;
-  }
-  if (hasClaudeTitleModelSelection) {
-    settings11.titleGenerationModel = "";
-    changed = true;
-  }
-  return changed;
 }
 var import_crypto_settings = require("crypto");
 var AES_PREFIX = "$AES$";
@@ -9281,10 +9224,7 @@ var ClaudianSettingsStorage = class {
         return s;
       });
     }
-    const hiddenProviderCommands = mergeLegacyClaudeHiddenCommands(
-      normalizeHiddenProviderCommands(stored.hiddenProviderCommands),
-      stored.hiddenSlashCommands
-    );
+    const hiddenProviderCommands = normalizeHiddenProviderCommands(stored.hiddenProviderCommands);
     const envSnippets = normalizeEnvSnippets(stored.envSnippets);
     const providerConfigs = normalizeProviderConfigs(stored.providerConfigs);
     const legacyProviderSettings = {
@@ -9310,18 +9250,12 @@ var ClaudianSettingsStorage = class {
       merged,
       getOpenCodeProviderSettings(legacyProviderSettings)
     );
-    updateCodexProviderSettings(
-      merged,
-      getCodexProviderSettings(legacyProviderSettings)
-    );
-    const didStripClaudeState = stripClaudeProviderState(merged);
-    if (settingsPath !== CLAUDIAN_SETTINGS_PATH || didStripClaudeState || (hasLegacyTopLevelProviderFields(stored) || "show1MModel" in stored || "slashCommands" in stored || "hiddenSlashCommands" in stored || "activeConversationId" in stored || "allowExternalAccess" in stored || "allowedExportPaths" in stored || "enableBlocklist" in stored || "blockedCommands" in stored || JSON.stringify(envSnippets) !== JSON.stringify((_a3 = stored.envSnippets) != null ? _a3 : []))) {
+    if (settingsPath !== CLAUDIAN_SETTINGS_PATH || hasLegacyTopLevelProviderFields(stored) || "show1MModel" in stored || "slashCommands" in stored || "hiddenSlashCommands" in stored || "activeConversationId" in stored || "allowExternalAccess" in stored || "allowedExportPaths" in stored || "enableBlocklist" in stored || "blockedCommands" in stored || JSON.stringify(envSnippets) !== JSON.stringify((_a3 = stored.envSnippets) != null ? _a3 : []))) {
       await this.save(merged);
     }
     return merged;
   }
   async save(settings11) {
-    stripClaudeProviderState(settings11);
     var toSave = stripLegacyFields(settings11);
     if (typeof toSave.sharedEnvironmentVariables === "string") {
       toSave.sharedEnvironmentVariables = encryptSensitive(this.adapter, toSave.sharedEnvironmentVariables);
