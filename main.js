@@ -9249,7 +9249,7 @@ var ClaudianSettingsStorage = class {
       merged,
       getOpenCodeProviderSettings(legacyProviderSettings)
     );
-    if (settingsPath !== CLAUDIAN_SETTINGS_PATH || hasLegacyTopLevelProviderFields(stored) || "show1MModel" in stored || "slashCommands" in stored || "hiddenSlashCommands" in stored || "activeConversationId" in stored || "allowExternalAccess" in stored || "allowedExportPaths" in stored || "enableBlocklist" in stored || "blockedCommands" in stored || JSON.stringify(envSnippets) !== JSON.stringify((_a3 = stored.envSnippets) != null ? _a3 : []))) {
+    if (settingsPath !== CLAUDIAN_SETTINGS_PATH || hasLegacyTopLevelProviderFields(stored) || "show1MModel" in stored || "slashCommands" in stored || "hiddenSlashCommands" in stored || "activeConversationId" in stored || "allowExternalAccess" in stored || "allowedExportPaths" in stored || "enableBlocklist" in stored || "blockedCommands" in stored || JSON.stringify(envSnippets) !== JSON.stringify((_a3 = stored.envSnippets) != null ? _a3 : [])) {
       await this.save(merged);
     }
     return merged;
