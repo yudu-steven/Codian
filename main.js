@@ -24792,6 +24792,7 @@ function E$$({ prompt: $, options: X }) {
     }).catch((V) => {
       let N = f4(V);
       z8.spawnAbort(N), W.setError(N);
+      q5(V && typeof V === "string" && V.startsWith((0, import_os.tmpdir)()) ? V : "");
     }), zH(W, z8, $, G), W;
   }
   let { queryInstance: J, transport: Q, abortController: Y } = WH(X, typeof $ === "string");
@@ -26163,6 +26164,39 @@ function stripClaudeProviderState(settings11) {
   }
   return changed;
 }
+var import_crypto_settings = require("crypto");
+var AES_PREFIX = "$AES$";
+function getEncKey(adapter) {
+  var name = typeof adapter.app.vault.getName === "function" ? adapter.app.vault.getName() : "claudian";
+  return import_crypto_settings.createHash("sha256").update(name + "@claudian-enc-v1").digest();
+}
+function encryptSensitive(adapter, val) {
+  if (!val || typeof val !== "string" || val.startsWith(AES_PREFIX)) return val;
+  try {
+    var key = getEncKey(adapter);
+    var iv = import_crypto_settings.randomBytes(16);
+    var cipher = import_crypto_settings.createCipheriv("aes-256-gcm", key, iv);
+    var enc = cipher.update(val, "utf8", "hex");
+    enc += cipher.final("hex");
+    return AES_PREFIX + "/" + iv.toString("hex") + "/" + cipher.getAuthTag().toString("hex") + "/" + enc;
+  } catch (e) {
+    return val;
+  }
+}
+function decryptSensitive(adapter, val) {
+  if (!val || typeof val !== "string" || !val.startsWith(AES_PREFIX + "/")) return val;
+  var parts = val.substring(AES_PREFIX.length + 1).split("/");
+  if (parts.length !== 3) return val;
+  try {
+    var key = getEncKey(adapter);
+    var decipher = import_crypto_settings.createDecipheriv("aes-256-gcm", key, Buffer.from(parts[0], "hex"));
+    decipher.setAuthTag(Buffer.from(parts[1], "hex"));
+    var dec = decipher.update(parts[2], "hex", "utf8");
+    return dec + decipher.final("utf8");
+  } catch (e) {
+    return val;
+  }
+}
 var ClaudianSettingsStorage = class {
   constructor(adapter) {
     this.adapter = adapter;
@@ -26175,6 +26209,18 @@ var ClaudianSettingsStorage = class {
     }
     const content = await this.adapter.read(settingsPath);
     const stored = JSON.parse(content);
+    if (typeof stored.sharedEnvironmentVariables === "string") {
+      stored.sharedEnvironmentVariables = decryptSensitive(this.adapter, stored.sharedEnvironmentVariables);
+    }
+    if (Array.isArray(stored.envSnippets)) {
+      var _adapter = this.adapter;
+      stored.envSnippets = stored.envSnippets.map(function(s) {
+        if (s && typeof s.envVars === "string") {
+          return Object.assign({}, s, { envVars: decryptSensitive(_adapter, s.envVars) });
+        }
+        return s;
+      });
+    }
     const hiddenProviderCommands = mergeLegacyClaudeHiddenCommands(
       normalizeHiddenProviderCommands(stored.hiddenProviderCommands),
       stored.hiddenSlashCommands
@@ -26216,8 +26262,21 @@ var ClaudianSettingsStorage = class {
   }
   async save(settings11) {
     stripClaudeProviderState(settings11);
+    var toSave = stripLegacyFields(settings11);
+    if (typeof toSave.sharedEnvironmentVariables === "string") {
+      toSave.sharedEnvironmentVariables = encryptSensitive(this.adapter, toSave.sharedEnvironmentVariables);
+    }
+    if (Array.isArray(toSave.envSnippets)) {
+      var _adapter2 = this.adapter;
+      toSave.envSnippets = toSave.envSnippets.map(function(s) {
+        if (s && typeof s.envVars === "string") {
+          return Object.assign({}, s, { envVars: encryptSensitive(_adapter2, s.envVars) });
+        }
+        return s;
+      });
+    }
     const content = JSON.stringify(
-      stripLegacyFields(settings11),
+      toSave,
       null,
       2
     );
@@ -54199,6 +54258,12 @@ var McpServerModal = class extends import_obsidian6.Modal {
         new import_obsidian6.Notice("Please enter a command");
         return;
       }
+      if (/^sudo\s/i.test(fullCommand)) {
+        new import_obsidian6.Notice("Warning: Running MCP server with sudo is not recommended", 5e3);
+      }
+      if (/[;|&$`()]/.test(fullCommand)) {
+        new import_obsidian6.Notice("Warning: Command contains shell metacharacters. Use the Env field for environment variables.", 5e3);
+      }
       const { cmd, args } = parseCommand(fullCommand);
       const stdioConfig = { command: cmd };
       if (args.length > 0) {
@@ -78883,6 +78948,18 @@ var IMAGE_EXTENSIONS = /* @__PURE__ */ new Set([
   "bmp",
   "ico"
 ]);
+var ALLOWED_IMAGE_MEDIA_TYPES = /* @__PURE__ */ new Set([
+  "image/png",
+  "image/jpeg",
+  "image/jpg",
+  "image/gif",
+  "image/webp",
+  "image/bmp",
+  "image/ico"
+]);
+function isAllowedImageMediaType(mediaType) {
+  return typeof mediaType === "string" && ALLOWED_IMAGE_MEDIA_TYPES.has(mediaType.toLowerCase());
+}
 var IMAGE_EMBED_PATTERN = /!\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g;
 function isImagePath(path19) {
   var _a3;
@@ -79339,6 +79416,7 @@ var _MessageRenderer = class _MessageRenderer {
    * Shows full-size image in modal overlay.
    */
   showFullImage(image) {
+    if (!isAllowedImageMediaType(image.mediaType)) return;
     const dataUri = `data:${image.mediaType};base64,${image.data}`;
     const overlay = document.body.createDiv({ cls: "claudian-image-modal-overlay" });
     const modal = overlay.createDiv({ cls: "claudian-image-modal" });
@@ -79369,6 +79447,7 @@ var _MessageRenderer = class _MessageRenderer {
    * Sets image src from attachment data.
    */
   setImageSrc(imgEl, image) {
+    if (!isAllowedImageMediaType(image.mediaType)) return;
     const dataUri = `data:${image.mediaType};base64,${image.data}`;
     imgEl.setAttribute("src", dataUri);
   }
@@ -79582,31 +79661,33 @@ var BangBashService = class {
   }
   execute(command) {
     return new Promise((resolve5) => {
-      (0, import_child_process7.exec)(command, {
+      if (typeof command !== "string" || command.length > 4096) {
+        resolve5({ command, stdout: "", stderr: "Command rejected: invalid length", exitCode: 1, error: "Command too long or invalid" });
+        return;
+      }
+      var shell = process.platform === "win32" ? "cmd.exe" : "/bin/bash";
+      var shellArg = process.platform === "win32" ? "/c" : "-c";
+      var child = (0, import_child_process7.spawn)(shell, [shellArg, command], {
         cwd: this.cwd,
         env: { ...process.env, PATH: this.enhancedPath },
         timeout: TIMEOUT_MS,
-        maxBuffer: MAX_BUFFER,
-        shell: process.platform === "win32" ? "cmd.exe" : "/bin/bash"
-      }, (error48, stdout, stderr) => {
-        if (error48 && "killed" in error48 && error48.killed) {
-          const isMaxBuffer = "code" in error48 && error48.code === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER";
-          resolve5({
-            command,
-            stdout: stdout != null ? stdout : "",
-            stderr: stderr != null ? stderr : "",
-            exitCode: 124,
-            error: isMaxBuffer ? "Output exceeded maximum buffer size (1MB)" : `Command timed out after ${TIMEOUT_MS / 1e3}s`
-          });
-          return;
-        }
-        resolve5({
-          command,
-          stdout: stdout != null ? stdout : "",
-          stderr: stderr != null ? stderr : "",
-          exitCode: typeof (error48 == null ? void 0 : error48.code) === "number" ? error48.code : error48 ? 1 : 0
-        });
+        stdio: ["pipe", "pipe", "pipe"],
+        windowsHide: true
       });
+      var stdout = "", stderr = "";
+      child.stdout.on("data", function(chunk) { stdout += String(chunk); });
+      child.stderr.on("data", function(chunk) { stderr += String(chunk); });
+      var settled = false;
+      function finish(exitCode, errorMsg) {
+        if (settled) return;
+        settled = true;
+        resolve5({ command, stdout, stderr, exitCode, error: errorMsg || void 0 });
+      }
+      child.on("error", function(err) { finish(1, err.message); });
+      child.on("close", function(code) { finish(typeof code === "number" ? code : 1); });
+      setTimeout(function() {
+        if (!settled) { child.kill(); finish(124, "Command timed out after " + TIMEOUT_MS / 1e3 + "s"); }
+      }, TIMEOUT_MS);
     });
   }
 };
@@ -82449,6 +82530,7 @@ var ImageContextManager = class {
     });
   }
   showFullImage(image) {
+    if (!isAllowedImageMediaType(image.mediaType)) return;
     const overlay = document.body.createDiv({ cls: "claudian-image-modal-overlay" });
     const modal = overlay.createDiv({ cls: "claudian-image-modal" });
     modal.createEl("img", {
@@ -84484,6 +84566,38 @@ function initializeInstructionAndTodo(tab, plugin) {
           onSubmit: async (command) => {
             const statusPanel = tab.ui.statusPanel;
             if (!statusPanel) return;
+            var DANGEROUS_PATTERNS = [
+              { pattern: /(^|\s)rm\s+(-[rf]+\s+)?(\/|\/home|\/root|\/etc|\/var|\/usr)/i, reason: "Destructive file removal" },
+              { pattern: /(^|\s)(dd|mkfs|fdisk|parted|mkswap)\s/, reason: "Disk/partition operation" },
+              { pattern: /(^|\s):\(\)\s*\{/, reason: "Possible fork bomb" },
+              { pattern: /(^|\s)chmod\s+-R\s+777\s+\//, reason: "Recursive permission change on root" },
+              { pattern: /(^|\s)(curl|wget)\s+.*\s*\|\s*(bash|sh|zsh)\b/i, reason: "Remote script execution" },
+              { pattern: /(^|\s)>(?:\s*\/dev\/(sda|sdb|sdc|nvme|mmc))/, reason: "Direct disk write" },
+              { pattern: /(^|\s)mv\s+\/\s+/, reason: "Moving root filesystem" }
+            ];
+            var isDangerous = false;
+            var dangerReason = "";
+            for (var _i = 0; _i < DANGEROUS_PATTERNS.length; _i++) {
+              var _p = DANGEROUS_PATTERNS[_i];
+              if (_p.pattern.test(command)) {
+                isDangerous = true;
+                dangerReason = _p.reason;
+                break;
+              }
+            }
+            if (isDangerous) {
+              var confirmed = new import_obsidian38.Notice("", 8e3);
+              confirmed.noticeEl.style.cursor = "pointer";
+              confirmed.noticeEl.innerHTML = "Dangerous command detected: " + dangerReason + "<br><strong>Click to execute anyway</strong><br><small>" + command.substring(0, 200) + "</small>";
+              var userConfirmed = await new Promise(function(resolve5) {
+                confirmed.noticeEl.addEventListener("click", function() { confirmed.hide(); resolve5(true); });
+                setTimeout(function() { confirmed.hide(); resolve5(false); }, 8e3);
+              });
+              if (!userConfirmed) {
+                new import_obsidian38.Notice("BangBash command cancelled");
+                return;
+              }
+            }
             const id = `bash-${Date.now()}`;
             statusPanel.addBashOutput({ id, command, status: "running", output: "" });
             const result = await bashService.execute(command);
@@ -86386,7 +86500,7 @@ var DiffWidget = class extends import_view2.WidgetType {
   toDOM() {
     const span = document.createElement("span");
     span.className = "claudian-inline-diff-replace";
-    span.innerHTML = this.diffHtml;
+    span.innerHTML = this.diffHtml.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "").replace(/\bon\w+\s*=\s*["'][^"']*["']/gi, "");
     const btns = document.createElement("span");
     btns.className = "claudian-inline-diff-buttons";
     const rejectBtn = document.createElement("button");
