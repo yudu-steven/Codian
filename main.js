@@ -65743,6 +65743,25 @@ var opencodeSettingsReconciler = {
     return false;
   }
 };
+async function refreshOpenCodeModelCatalogStandalone(plugin) {
+  var settingsBag = plugin.settings;
+  try {
+    var result = await fetchOpenCodeModelCatalog(plugin, "opencode");
+    var snapshot = ProviderSettingsCoordinator.getProviderSettingsSnapshot(settingsBag, "opencode");
+    updateOpenCodeProviderSettings(snapshot, { modelCatalog: result.catalog, modelCatalogFetchedAt: result.fetchedAt, modelCatalogConfigKey: result.configKey });
+    var uiConfig = ProviderRegistry.getChatUIConfig("opencode");
+    var modelOptions = uiConfig.getModelOptions(snapshot);
+    if (!modelOptions.some(function(option) { return option.value === snapshot.model; })) {
+      snapshot.model = OPEN_CODE_DEFAULT_MODEL;
+      uiConfig.applyModelDefaults(OPEN_CODE_DEFAULT_MODEL, snapshot);
+    }
+    ProviderSettingsCoordinator.commitProviderSettingsSnapshot(settingsBag, "opencode", snapshot);
+    await plugin.saveSettings();
+    return result.catalog;
+  } catch (e) {
+    return [];
+  }
+}
 function findOpenCodeBinaryPath(additionalPath, platform = process.platform) {
   const binaryNames = platform === "win32" ? ["opencode.exe", "opencode.cmd", "opencode"] : ["opencode"];
   const searchEntries = parsePathEntries(getEnhancedPath(additionalPath));
@@ -66462,6 +66481,9 @@ var OpenCodeChatRuntime = class {
       this.startEventStream();
     }
     this.setReady(true);
+    if (needsRestart) {
+      refreshOpenCodeModelCatalogStandalone(this.plugin).catch(function() {});
+    }
     return needsRestart;
   }
   startEventStream() {
@@ -67374,29 +67396,13 @@ var opencodeSettingsTabRenderer = {
       context.refreshModelSelectors();
     };
     const refreshOpenCodeModelCatalog = async () => {
-      if (isRefreshingModels) {
-        return;
-      }
+      if (isRefreshingModels) return;
       isRefreshingModels = true;
       renderOpenCodeModelSettings();
       try {
-        const result = await fetchOpenCodeModelCatalog(context.plugin, "opencode");
-        const snapshot = getOpenCodeSettingsSnapshot();
-        updateOpenCodeProviderSettings(snapshot, {
-          modelCatalog: result.catalog,
-          modelCatalogFetchedAt: result.fetchedAt,
-          modelCatalogConfigKey: result.configKey
-        });
-        const uiConfig = ProviderRegistry.getChatUIConfig("opencode");
-        const modelOptions = uiConfig.getModelOptions(snapshot);
-        if (!modelOptions.some((option) => option.value === snapshot.model)) {
-          snapshot.model = OPEN_CODE_DEFAULT_MODEL;
-          uiConfig.applyModelDefaults(OPEN_CODE_DEFAULT_MODEL, snapshot);
-        }
-        ProviderSettingsCoordinator.commitProviderSettingsSnapshot(settingsBag, "opencode", snapshot);
-        await context.plugin.saveSettings();
+        var catalog = await refreshOpenCodeModelCatalogStandalone(context.plugin);
         context.refreshModelSelectors();
-        new import_obsidian_opencode.Notice(`Refreshed ${result.catalog.length} OpenCode model(s).`);
+        new import_obsidian_opencode.Notice("Refreshed " + catalog.length + " OpenCode model(s).");
       } catch (error48) {
         new import_obsidian_opencode.Notice(
           error48 instanceof Error ? error48.message : "Failed to refresh OpenCode models."
@@ -71627,6 +71633,11 @@ var BUILT_IN_COMMANDS = [
     description: "Fork entire conversation to new session",
     action: "fork",
     requiredCapability: "supportsFork"
+  },
+  {
+    name: "models",
+    description: "Switch AI model",
+    action: "models"
   }
 ];
 var commandMap = /* @__PURE__ */ new Map();
@@ -76658,6 +76669,46 @@ var InputController = class {
           return;
         }
         await this.deps.onForkAll();
+        break;
+      }
+      case "models": {
+        var app = this.deps.plugin.app;
+        var settings = this.deps.plugin.settings;
+        var providerId = this.getActiveProviderId();
+        var uiConfig = ProviderRegistry.getChatUIConfig(providerId);
+        var modelOptions = uiConfig.getModelOptions(settings);
+        var currentModel = settings.model;
+        var ModelPickerModal = function(_Modal) {
+          return class extends _Modal {
+            onOpen() {
+              this.setTitle("Select Model");
+              var contentEl = this.contentEl;
+              new import_obsidian24.Setting(contentEl).setName("Available models").addDropdown(function(dropdown) {
+                for (var i = 0; i < modelOptions.length; i++) {
+                  dropdown.addOption(modelOptions[i].value, modelOptions[i].label);
+                }
+                dropdown.setValue(currentModel);
+              });
+              var listEl = contentEl.createDiv({ cls: "claudian-sp-modal" });
+              for (var i = 0; i < modelOptions.length; i++) {
+                var opt = modelOptions[i];
+                var row = listEl.createDiv({ cls: "claudian-model-option" });
+                if (opt.value === currentModel) row.addClass("selected");
+                row.createSpan({ text: opt.label });
+                if (opt.group) row.setAttribute("title", opt.group);
+                row.addEventListener("click", async function(value) {
+                  return function() {
+                    settings.model = value;
+                    uiConfig.applyModelDefaults(value, settings);
+                    this.deps.plugin.saveSettings();
+                    this.close();
+                  }.bind(this);
+                }.bind(this, opt.value));
+              }
+            }
+          };
+        }(import_obsidian24.Modal);
+        new ModelPickerModal(app).open();
         break;
       }
       default:
@@ -82609,6 +82660,21 @@ var ModelSelector = class {
     this.container.empty();
     this.buttonEl = this.container.createDiv({ cls: "claudian-model-btn" });
     this.updateDisplay();
+    if (typeof this.callbacks.onRefreshModels === "function") {
+      var refreshBtn = this.container.createDiv({ cls: "claudian-model-refresh-btn" });
+      refreshBtn.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>';
+      refreshBtn.setAttribute("aria-label", "Refresh models");
+      refreshBtn.title = "Refresh models";
+      refreshBtn.addEventListener("click", async function(e2) {
+        e2.stopPropagation();
+        refreshBtn.classList.add("loading");
+        try {
+          await this.callbacks.onRefreshModels();
+        } finally {
+          refreshBtn.classList.remove("loading");
+        }
+      }.bind(this));
+    }
     this.dropdownEl = this.container.createDiv({ cls: "claudian-model-dropdown" });
     this.renderOptions();
   }
@@ -84721,6 +84787,11 @@ function initializeInputToolbar(tab, plugin, getProviderCatalogConfig, onProvide
         "claudian-input-plan-mode",
         mode === "plan" && getTabCapabilities(tab, plugin).supportsPlanMode
       );
+    },
+    onRefreshModels: async () => {
+      await refreshOpenCodeModelCatalogStandalone(plugin);
+      var _ms = tab.ui.modelSelector;
+      if (_ms) { _ms.render(); }
     }
   });
   tab.ui.modelSelector = toolbarComponents.modelSelector;
@@ -87774,6 +87845,7 @@ var ClaudianPlugin = class extends import_obsidian45.Plugin {
         this.storage.sessions.toSessionMetadata(conv)
       );
     }
+    refreshOpenCodeModelCatalogStandalone(this).catch(function() {});
   }
   backfillConversationResponseTimestamps() {
     const updated = [];

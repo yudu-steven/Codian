@@ -2067,6 +2067,38 @@ body.theme-light .claudian-message-content pre {
   visibility: visible;
 }
 
+.claudian-model-refresh-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+  border-radius: 4px;
+  color: var(--text-muted);
+  margin-left: 2px;
+}
+
+.claudian-model-refresh-btn:hover {
+  color: var(--claudian-brand);
+  background: var(--background-modifier-hover);
+}
+
+.claudian-model-refresh-btn.loading svg {
+  animation: claudian-spin 0.8s linear infinite;
+}
+
+.claudian-model-refresh-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+@keyframes claudian-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
 .claudian-model-group {
   padding: 3px 8px;
   font-size: 8px;
