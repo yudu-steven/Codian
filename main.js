@@ -39510,7 +39510,12 @@ var OpenCodeChatRuntime = class {
     return OPENCODE_PROVIDER_CAPABILITIES;
   }
   prepareTurn(request) {
-    return request;
+    return {
+      persistedContent: request.text || "",
+      isCompact: /^\/compact(\s|$)/i.test(request.text || ""),
+      request,
+      prompt: request.text || ""
+    };
   }
   consumeTurnMetadata() {
     const metadata = { ...this.turnMetadata };
