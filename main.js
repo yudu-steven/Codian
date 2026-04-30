@@ -65124,45 +65124,6 @@ var codexSettingsTabRenderer = {
   }
 };
 
-// src/providers/codex/app/CodexWorkspaceServices.ts
-function createCodexCliResolver() {
-  return new CodexCliResolver();
-}
-async function createCodexWorkspaceServices(plugin, vaultAdapter, homeAdapter) {
-  const subagentStorage = new CodexSubagentStorage(vaultAdapter);
-  const agentMentionProvider = new CodexAgentMentionProvider(subagentStorage);
-  await agentMentionProvider.loadAgents();
-  const skillListProvider = new CodexSkillListingService(plugin);
-  const commandCatalog = new CodexSkillCatalog(
-    new CodexSkillStorage(
-      vaultAdapter,
-      homeAdapter
-    ),
-    skillListProvider,
-    getVaultPath(plugin.app)
-  );
-  return {
-    subagentStorage,
-    commandCatalog,
-    agentMentionProvider,
-    cliResolver: createCodexCliResolver(),
-    settingsTabRenderer: codexSettingsTabRenderer,
-    refreshAgentMentions: async () => {
-      await agentMentionProvider.loadAgents();
-    }
-  };
-}
-var codexWorkspaceRegistration = {
-  initialize: async ({ plugin, vaultAdapter, homeAdapter }) => createCodexWorkspaceServices(
-    plugin,
-    vaultAdapter,
-    homeAdapter
-  )
-};
-function getCodexWorkspaceServices() {
-  return ProviderWorkspaceRegistry.requireServices("codex");
-}
-
 // src/providers/codex/runtime/CodexAuxQueryRunner.ts
 var CodexAuxQueryRunner = class {
   constructor(plugin) {
@@ -71509,7 +71470,6 @@ function registerBuiltInProviders() {
   ProviderRegistry.register("opencode", opencodeProviderRegistration);
   ProviderRegistry.register("codex", codexProviderRegistration);
   ProviderWorkspaceRegistry.register("opencode", opencodeWorkspaceRegistration);
-  ProviderWorkspaceRegistry.register("codex", codexWorkspaceRegistration);
   builtInProvidersRegistered = true;
 }
 registerBuiltInProviders();
