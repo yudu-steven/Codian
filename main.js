@@ -62245,28 +62245,6 @@ var claudeProviderRegistration = {
 // src/providers/codex/app/CodexWorkspaceServices.ts
 init_path();
 
-// src/providers/codex/agents/CodexAgentMentionProvider.ts
-var CodexAgentMentionProvider = class {
-  constructor(storage) {
-    this.storage = storage;
-    this.agents = [];
-  }
-  async loadAgents() {
-    this.agents = await this.storage.loadAll();
-  }
-  searchAgents(query) {
-    const q10 = query.toLowerCase();
-    return this.agents.filter(
-      (a2) => a2.name.toLowerCase().includes(q10) || a2.description.toLowerCase().includes(q10)
-    ).map((a2) => ({
-      id: a2.name,
-      name: a2.name,
-      description: a2.description,
-      source: "vault"
-    }));
-  }
-};
-
 // src/providers/codex/runtime/CodexAppServerProcess.ts
 var import_child_process5 = require("child_process");
 var SIGKILL_TIMEOUT_MS = 3e3;
@@ -71444,23 +71422,6 @@ function toAttachmentFilename(attachment, index) {
 }
 
 // src/providers/codex/registration.ts
-var codexProviderRegistration = {
-  displayName: "Codex",
-  blankTabOrder: 10,
-  isEnabled: (settings11) => getCodexProviderSettings(settings11).enabled,
-  capabilities: CODEX_PROVIDER_CAPABILITIES,
-  environmentKeyPatterns: [/^OPENAI_/i, /^CODEX_/i],
-  chatUIConfig: codexChatUIConfig,
-  settingsReconciler: codexSettingsReconciler,
-  createRuntime: ({ plugin }) => new CodexChatRuntime(plugin),
-  createTitleGenerationService: (plugin) => new CodexTitleGenerationService(plugin),
-  createInstructionRefineService: (plugin) => new CodexInstructionRefineService(plugin),
-  createInlineEditService: (plugin) => new CodexInlineEditService(plugin),
-  historyService: new CodexConversationHistoryService(),
-  taskResultInterpreter: new CodexTaskResultInterpreter(),
-  subagentLifecycleAdapter: codexSubagentLifecycleAdapter
-};
-
 // src/providers/index.ts
 var builtInProvidersRegistered = false;
 function registerBuiltInProviders() {
@@ -71468,7 +71429,6 @@ function registerBuiltInProviders() {
     return;
   }
   ProviderRegistry.register("opencode", opencodeProviderRegistration);
-  ProviderRegistry.register("codex", codexProviderRegistration);
   ProviderWorkspaceRegistry.register("opencode", opencodeWorkspaceRegistration);
   builtInProvidersRegistered = true;
 }
