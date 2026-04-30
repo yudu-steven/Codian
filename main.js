@@ -9058,8 +9058,7 @@ var DEFAULT_CLAUDIAN_SETTINGS = {
   },
   locale: "en",
   providerConfigs: {
-    opencode: { ...DEFAULT_OPENCODE_PROVIDER_SETTINGS },
-    codex: { ...DEFAULT_CODEX_PROVIDER_SETTINGS }
+    opencode: { ...DEFAULT_OPENCODE_PROVIDER_SETTINGS }
   },
   settingsProvider: "opencode",
   savedProviderModel: {},
@@ -9286,26 +9285,6 @@ var ClaudianSettingsStorage = class {
   async update(updates) {
     const current = await this.load();
     await this.save({ ...current, ...updates });
-  }
-  async setLastModel(model, isCustom) {
-    if (isCustom) {
-      await this.update({ lastCustomModel: model });
-      return;
-    }
-    const current = await this.load();
-    updateClaudeProviderSettings(
-      current,
-      { lastModel: model }
-    );
-    await this.save(current);
-  }
-  async setLastEnvHash(hash2) {
-    const current = await this.load();
-    updateClaudeProviderSettings(
-      current,
-      { environmentHash: hash2 }
-    );
-    await this.save(current);
   }
   getDefaults() {
     return DEFAULT_CLAUDIAN_SETTINGS;
